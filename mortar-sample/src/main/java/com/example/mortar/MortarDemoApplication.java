@@ -21,7 +21,7 @@ import dagger.ObjectGraph;
 import mortar.Mortar;
 import mortar.MortarScope;
 
-public class DemoApplication extends Application {
+public class MortarDemoApplication extends Application {
   private MortarScope rootScope;
 
   @Override public void onCreate() {

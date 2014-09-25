@@ -15,24 +15,29 @@
  */
 package com.example.mortar.core;
 
-import com.example.mortar.android.ActionBarModule;
+import android.app.Activity;
+import com.example.flow.appflow.Screen;
+import com.example.mortar.MortarDemoActivity;
 import com.example.mortar.android.ActionBarOwner;
-import com.example.mortar.screen.ChatListScreen;
+import com.example.mortar.mortarflow.AppFlowPresenter;
 import com.example.mortar.screen.FriendListScreen;
-import com.example.mortar.util.FlowOwner;
 import dagger.Provides;
 import flow.Flow;
 import flow.HasParent;
-import flow.Parcer;
-import javax.inject.Inject;
 import javax.inject.Singleton;
 import mortar.Blueprint;
 import rx.functions.Action0;
 
-public class Main implements Blueprint {
+public class MortarDemoActivityBlueprint implements Blueprint {
+
+  private final String scopeName;
+
+  public MortarDemoActivityBlueprint(Activity activity) {
+    scopeName = activity.getLocalClassName() + "-task-" + activity.getTaskId();
+  }
 
   @Override public String getMortarScopeName() {
-    return getClass().getName();
+    return scopeName;
   }
 
   @Override public Object getDaggerModule() {
@@ -40,45 +45,42 @@ public class Main implements Blueprint {
   }
 
   @dagger.Module( //
-      includes = ActionBarModule.class,
-      injects = MainView.class,
-      addsTo = ApplicationModule.class, //
+      addsTo = ApplicationModule.class,
+      includes = ActionBarOwner.ActionBarModule.class,
+      injects = MortarDemoActivity.class,
       library = true //
   )
   public static class Module {
-    @Provides @MainScope Flow provideFlow(Presenter presenter) {
+    @Provides @Singleton AppFlowPresenter<MortarDemoActivity> providePresenter(
+        ActionBarOwner actionBarOwner) {
+      return new Presenter(actionBarOwner);
+    }
+
+    @Provides Flow provideFlow(AppFlowPresenter<MortarDemoActivity> presenter) {
       return presenter.getFlow();
     }
   }
 
-  @Singleton public static class Presenter extends FlowOwner<Blueprint, MainView> {
+  private static class Presenter extends AppFlowPresenter<MortarDemoActivity> {
     private final ActionBarOwner actionBarOwner;
 
-    @Inject Presenter(Parcer<Object> flowParcer, ActionBarOwner actionBarOwner) {
-      super(flowParcer);
+    Presenter(ActionBarOwner actionBarOwner) {
       this.actionBarOwner = actionBarOwner;
     }
 
-    @Override public void showScreen(Blueprint newScreen, Flow.Direction direction) {
+    @Override public void showScreen(Screen newScreen, Flow.Direction direction,
+        Flow.Callback callback) {
       boolean hasUp = newScreen instanceof HasParent;
       String title = newScreen.getClass().getSimpleName();
       ActionBarOwner.MenuAction menu =
           hasUp ? null : new ActionBarOwner.MenuAction("Friends", new Action0() {
             @Override public void call() {
-              onFriendsListPicked();
+              getFlow().goTo(new FriendListScreen());
             }
           });
       actionBarOwner.setConfig(new ActionBarOwner.Config(false, hasUp, title, menu));
 
-      super.showScreen(newScreen, direction);
-    }
-
-    @Override protected Blueprint getFirstScreen() {
-      return new ChatListScreen();
-    }
-
-    public void onFriendsListPicked() {
-      getFlow().goTo(new FriendListScreen());
+      super.showScreen(newScreen, direction, callback);
     }
   }
 }

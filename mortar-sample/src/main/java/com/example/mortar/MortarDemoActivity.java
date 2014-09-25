@@ -16,16 +16,19 @@
 package com.example.mortar;
 
 import android.app.ActionBar;
-import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import com.example.flow.appflow.AppFlow;
+import com.example.flow.appflow.Screen;
+import com.example.flow.screenswitcher.CanShowScreen;
+import com.example.flow.screenswitcher.HandlesBack;
+import com.example.flow.screenswitcher.HandlesUp;
 import com.example.mortar.android.ActionBarOwner;
-import com.example.mortar.core.Main;
-import com.example.mortar.core.MainView;
+import com.example.mortar.core.MortarDemoActivityBlueprint;
+import com.example.mortar.mortarflow.AppFlowPresenter;
 import flow.Flow;
 import javax.inject.Inject;
 import mortar.Mortar;
@@ -37,17 +40,26 @@ import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_LAUNCHER;
 import static android.view.MenuItem.SHOW_AS_ACTION_ALWAYS;
 
-/**
- * Hooks up the {@link MortarActivityScope}. Loads the {@link com.example.mortar.core.MainView}
- * and lets it know about up button and back button presses. Shares control of the {@link
- * ActionBar} via the {@link com.example.mortar.android.ActionBarOwner}.
- */
-public class DemoActivity extends Activity implements ActionBarOwner.View {
+public class MortarDemoActivity extends android.app.Activity
+    implements ActionBarOwner.Activity, AppFlowPresenter.Activity {
   private MortarActivityScope activityScope;
   private ActionBarOwner.MenuAction actionBarMenuAction;
 
   @Inject ActionBarOwner actionBarOwner;
-  private Flow mainFlow;
+  @Inject AppFlowPresenter<MortarDemoActivity> appFlowPresenter;
+
+  private CanShowScreen container;
+  private HandlesBack containerAsHandlesBack;
+  private HandlesUp containerAsHandlesUp;
+
+  @Override public MortarScope getScope() {
+    return activityScope;
+  }
+
+  @Override public void showScreen(Screen screen, Flow.Direction direction,
+      Flow.Callback callback) {
+    container.showScreen(screen, direction, callback);
+  }
 
   @Override protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -58,21 +70,26 @@ public class DemoActivity extends Activity implements ActionBarOwner.View {
     }
 
     MortarScope parentScope = Mortar.getScope(getApplication());
-    activityScope = Mortar.requireActivityScope(parentScope, new Main());
+    activityScope = Mortar.requireActivityScope(parentScope, new MortarDemoActivityBlueprint(this));
     Mortar.inject(this, this);
 
     activityScope.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_main);
-    MainView mainView = (MainView) findViewById(R.id.container);
-    mainFlow = mainView.getFlow();
 
     actionBarOwner.takeView(this);
+    appFlowPresenter.takeView(this);
+
+    setContentView(R.layout.root_layout);
+    container = (CanShowScreen) findViewById(R.id.container);
+    containerAsHandlesBack = (HandlesBack) container;
+    containerAsHandlesUp = (HandlesUp) container;
+
+    AppFlow.loadInitialScreen(this);
   }
 
   @Override public Object getSystemService(String name) {
-    if (Mortar.isScopeSystemService(name)) {
-      return activityScope;
-    }
+    if (Mortar.isScopeSystemService(name)) return activityScope;
+    if (AppFlow.isAppFlowSystemService(name)) return appFlowPresenter.getAppFlow();
+
     return super.getSystemService(name);
   }
 
@@ -83,20 +100,16 @@ public class DemoActivity extends Activity implements ActionBarOwner.View {
 
   /** Inform the view about back events. */
   @Override public void onBackPressed() {
-    // Give the view a chance to handle going back. If it declines the honor, let super do its thing.
-    if (!mainFlow.goBack()) super.onBackPressed();
+    if (!containerAsHandlesBack.onBackPressed()) super.onBackPressed();
   }
 
   /** Inform the view about up events. */
   @Override public boolean onOptionsItemSelected(MenuItem item) {
-    if (item.getItemId() == android.R.id.home) {
-      return mainFlow.goUp();
-    }
-
+    if (item.getItemId() == android.R.id.home) return containerAsHandlesUp.onUpPressed();
     return super.onOptionsItemSelected(item);
   }
 
-  /** Configure the action bar menu as required by {@link ActionBarOwner.View}. */
+  /** Configure the action bar menu as required by {@link ActionBarOwner.Activity}. */
   @Override public boolean onCreateOptionsMenu(Menu menu) {
     if (actionBarMenuAction != null) {
       menu.add(actionBarMenuAction.title)
@@ -119,9 +132,8 @@ public class DemoActivity extends Activity implements ActionBarOwner.View {
   }
 
   @Override protected void onDestroy() {
-    super.onDestroy();
-
     actionBarOwner.dropView(this);
+    appFlowPresenter.dropView(this);
 
     // activityScope may be null in case isWrongInstance() returned true in onCreate()
     if (isFinishing() && activityScope != null) {
@@ -129,10 +141,8 @@ public class DemoActivity extends Activity implements ActionBarOwner.View {
       parentScope.destroyChild(activityScope);
       activityScope = null;
     }
-  }
 
-  @Override public Context getMortarContext() {
-    return this;
+    super.onDestroy();
   }
 
   @Override public void setShowHomeEnabled(boolean enabled) {
@@ -147,7 +157,7 @@ public class DemoActivity extends Activity implements ActionBarOwner.View {
   }
 
   @Override public void setTitle(CharSequence title) {
-    getSupportActionBar().setTitle(title);
+    getActionBar().setTitle(title);
   }
 
   @Override public void setMenu(ActionBarOwner.MenuAction action) {

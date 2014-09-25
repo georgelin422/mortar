@@ -38,12 +38,11 @@ public class MessageView extends LinearLayout {
     super(context, attrs);
     setOrientation(VERTICAL);
     Mortar.inject(context, this);
+    ButterKnife.inject(this);
   }
 
-  @Override protected void onFinishInflate() {
-    super.onFinishInflate();
-    ButterKnife.inject(this);
-
+  @Override protected void onAttachedToWindow() {
+    super.onAttachedToWindow();
     presenter.takeView(this);
   }
 
